@@ -100,7 +100,7 @@ class DocumentManager implements DocumentManagerInterface
     /**
      * Checks if the $document is part of the current UnitOfWork and therefore managed.
      *
-     * @param object $document
+     * @param mixed $document
      *
      * @return bool
      */
@@ -134,7 +134,7 @@ class DocumentManager implements DocumentManagerInterface
      * Objects which previously referenced the detached object will continue to
      * reference it.
      *
-     * @param object $object The object to detach.
+     * @param mixed $object The object to detach.
      *
      * @return void
      */
@@ -146,7 +146,7 @@ class DocumentManager implements DocumentManagerInterface
     /**
      * Detaches the given object after flush.
      *
-     * @param object $object
+     * @param mixed $object
      *
      * @return void
      */
@@ -275,7 +275,7 @@ class DocumentManager implements DocumentManagerInterface
      *
      * This method is a no-op for other objects.
      *
-     * @param object $obj
+     * @param mixed $obj
      *
      * @return void
      */
@@ -308,7 +308,7 @@ class DocumentManager implements DocumentManagerInterface
      * NOTE: The persist operation always considers objects that are not yet known to
      * this ObjectManager as NEW. Do not pass detached objects to the persist operation.
      *
-     * @param object $object The instance to make managed and persistent.
+     * @param mixed $object The instance to make managed and persistent.
      *
      * @return void
      */
@@ -321,8 +321,8 @@ class DocumentManager implements DocumentManagerInterface
      * Refreshes the persistent state of an object from the database,
      * overriding any local changes that have not yet been persisted.
      *
-     * @param object $object The object to refresh.
-     * @param object $overwrite Commercetools returns a representation of the objectfor many update actions, so use
+     * @param mixed $object The object to refresh.
+     * @param mixed $overwrite Commercetools returns a representation of the objectfor many update actions, so use
      * this respons directly.
      * @return void
      */
@@ -336,7 +336,7 @@ class DocumentManager implements DocumentManagerInterface
      *
      * A removed object will be removed from the database as a result of the flush operation.
      *
-     * @param object $object The object instance to remove.
+     * @param mixed $object The object instance to remove.
      *
      * @return void
      */

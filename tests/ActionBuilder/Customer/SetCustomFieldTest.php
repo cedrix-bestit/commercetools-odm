@@ -19,7 +19,7 @@ use PHPUnit_Framework_MockObject_MockObject;
  *
  * @author lange <lange@bestit-online.de>
  * @category Tests
- * @package BestIt\CommercetoolsODM\Tests\ActionBuilder\ProductType
+ * @package BestIt\CommercetoolsODM\Tests\ActionBuilder\Customer
  * @subpackage ActionBuilder\Customer
  */
 class SetCustomFieldTest extends TestCase

@@ -11,6 +11,7 @@ use Commercetools\Core\Request\AbstractCreateRequest;
 use Commercetools\Core\Request\AbstractDeleteRequest;
 use Commercetools\Core\Request\AbstractUpdateRequest;
 use Doctrine\Common\Persistence\ObjectManager;
+use InvalidArgumentException;
 use Psr\Log\LoggerAwareInterface;
 
 /**
@@ -97,7 +98,7 @@ interface DocumentManagerInterface extends ObjectManager, LoggerAwareInterface
     /**
      * Returns a request class for fetching/updating/deleting documents using the request map of the given class name.
      *
-     * @throws \InvalidArgumentException
+     * @throws InvalidArgumentException
      *
      * @param string $className
      * @param string $requestType
@@ -110,7 +111,7 @@ interface DocumentManagerInterface extends ObjectManager, LoggerAwareInterface
     /**
      * Detaches the given object after flush.
      *
-     * @param object $object
+     * @param mixed $object
      *
      * @return void
      */
@@ -151,9 +152,9 @@ interface DocumentManagerInterface extends ObjectManager, LoggerAwareInterface
      * Refreshes the persistent state of an object from the database,
      * overriding any local changes that have not yet been persisted.
      *
-     * @param object $object The object to refresh.
-     * @param object $overwrite Commercetools returns a representation of the objectfor many update actions, so use
-     * this respons directly.
+     * @param mixed $object The object to refresh.
+     * @param mixed $overwrite Commercetools returns a representation of the objectfor many update actions, so use
+     *                          this response directly.
      * @return void
      */
     public function refresh($object, $overwrite = null);

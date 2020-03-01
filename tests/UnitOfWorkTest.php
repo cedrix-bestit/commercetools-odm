@@ -33,8 +33,8 @@ use Commercetools\Core\Model\Common\Attribute;
 use Commercetools\Core\Model\Common\JsonObject;
 use Commercetools\Core\Model\Common\LocalizedString;
 use Commercetools\Core\Model\Common\Money;
-use Commercetools\Core\Model\CustomObject\CustomObject;
 use Commercetools\Core\Model\Customer\Customer;
+use Commercetools\Core\Model\CustomObject\CustomObject;
 use Commercetools\Core\Model\Order\Order;
 use Commercetools\Core\Model\Product\Product;
 use Commercetools\Core\Model\Product\ProductCatalogData;
@@ -48,6 +48,7 @@ use Commercetools\Core\Model\TaxCategory\TaxCategoryReference;
 use Commercetools\Core\Request\ClientRequestInterface;
 use Commercetools\Core\Request\Orders\OrderDeleteRequest;
 use Commercetools\Core\Request\ProductTypes\ProductTypeCreateRequest;
+use Commercetools\Core\Request\ProductTypes\ProductTypeUpdateRequest;
 use Commercetools\Core\Response\ErrorResponse;
 use DateTime;
 use Doctrine\Common\EventManager;
@@ -60,7 +61,13 @@ use Psr\Http\Message\ResponseInterface;
 use Psr\Log\LoggerAwareTrait;
 use ReflectionClass;
 use RuntimeException;
+use function array_keys;
+use function assert;
+use function class_exists;
+use function file_get_contents;
+use function get_class;
 use function uniqid;
+use const DIRECTORY_SEPARATOR;
 
 /**
  * Class UnitOfWorkTest
@@ -83,7 +90,7 @@ class UnitOfWorkTest extends TestCase
     /**
      * The used document manager.
      *
-     * @var DocumentManagerInterface|PHPUnit_Framework_MockObject_MockObject
+     * @var DocumentManagerInterface|PHPUnit_Framework_MockObject_MockObject|null
      */
     private $documentManager = null;
 
@@ -97,21 +104,31 @@ class UnitOfWorkTest extends TestCase
     /**
      * The used document manager.
      *
-     * @var ListenersInvoker|PHPUnit_Framework_MockObject_MockObject
+     * @var ListenersInvoker|PHPUnit_Framework_MockObject_MockObject|null
      */
     private $listenerInvoker = null;
+
+    private function getMockedObjectWithMetadata(string $class, array $data)
+    {
+        $mockedObject = new $class($data);
+
+        $this->getOneMockedMetadata($mockedObject, false);
+
+        return $mockedObject;
+    }
 
     /**
      * Adds a mocked call for metadata for the given model.
      *
-     * @param string $model
+     * @param object|mixed $model The object for which the metadata should be mocked.
      * @param bool|int $once If true then just once, if false then any, if integer the exact count.
      *
      * @return PHPUnit_Framework_MockObject_MockObject
      */
-    private function getOneMockedMetadata(string $model, $once = true): PHPUnit_Framework_MockObject_MockObject
+    private function getOneMockedMetadata($model, $once = true): PHPUnit_Framework_MockObject_MockObject
     {
         $expects = $this->once();
+        $modelClass = get_class($model);
 
         if ($once !== true) {
             if ($once === false) {
@@ -124,16 +141,26 @@ class UnitOfWorkTest extends TestCase
         $this->documentManager
             ->expects($expects)
             ->method('getClassMetadata')
-            ->with($model)
+            ->with($modelClass)
             ->willReturn($classMetadata = $this->createMock(ClassMetadataInterface::class));
 
         $classMetadata
+            ->method('getFieldNames')
+            ->willReturn(array_keys($model->fieldDefinitions()));
+
+        $classMetadata
             ->method('getName')
-            ->willReturn($model);
+            ->willReturn($modelClass);
 
         $classMetadata
             ->method('isCTStandardModel')
-            ->willReturn(is_a($model, JsonObject::class, true));
+            ->willReturn(is_a($modelClass, JsonObject::class, true));
+
+        if (class_exists($possibleDraftClass = $modelClass . 'Draft')) {
+            $classMetadata
+                ->method('getDraft')
+                ->willReturn($possibleDraftClass);
+        }
 
         return $classMetadata;
     }
@@ -157,9 +184,10 @@ class UnitOfWorkTest extends TestCase
     /**
      * Mocks an listener invoker call for the given object.
      *
-     * @param object $order
+     * @param mixed $order
      * @param string $lifeCycleEventName
      * @param ClassMetadataInterface $orderMetadata
+     * @param mixed $expected
      *
      * @return UnitOfWorkTest
      */
@@ -1377,5 +1405,79 @@ class UnitOfWorkTest extends TestCase
     public function testScheduleSaveNewWithDetach()
     {
         $this->testScheduleSaveNew(true);
+    }
+
+    /**
+     * Checks that the version conflict of an update is handled correctly.
+     *
+     * @return void
+     */
+    public function testScheduleSaveUpdateConflict()
+    {
+        $this->fixture->registerAsManaged(
+            $type = $this->getMockedObjectWithMetadata(
+                $class = ProductType::class,
+                $oldData = [
+                    'createdAt' => new DateTime(),
+                    'id' => $typeId = 'type-id',
+                    'lastModifiedAt' => new DateTime(),
+                    'name' => $oldName = 'old-name',
+                    'version' => $version = 2
+                ]
+            ),
+            $typeId,
+            $version
+        );
+
+        $this->documentManager
+            ->method('createRequest')
+            ->with(
+                $class,
+                DocumentManagerInterface::REQUEST_TYPE_UPDATE_BY_ID,
+                $typeId,
+                $version
+            )
+            ->willReturn(new ProductTypeUpdateRequest($typeId, $version));
+
+        $this->documentManager
+            ->method('getRequestClass')
+            ->with($class, DocumentManagerInterface::REQUEST_TYPE_UPDATE_BY_ID)
+            ->willReturn(ProductTypeUpdateRequest::class);
+
+        assert($type instanceof ProductType);
+
+        $type->setName($newName = 'new-name');
+
+        $this->actionBuilderProcessor
+            ->method('createUpdateActions')
+            ->with(
+                static::isInstanceOf(ClassMetadataInterface::class),
+                ['name' => $newName],
+                $oldData,
+                $type
+            )
+            ->willReturn([]);
+
+        $this->fixture->setClient($this->getClientWithResponses(
+            function (): Response {
+                return new Response(
+                    409,
+                    [],
+                    '{
+  "statusCode": 409,
+  "message": "Version mismatch. Concurrent modification.",
+  "errors": [
+    {
+      "code": "ConcurrentModification",
+      "message": "Version mismatch. Concurrent modification.",
+      "currentVersion": 34285
+    }
+  ]
+}'
+                );
+            }
+        ));
+
+        $this->fixture->flush();
     }
 }

@@ -257,8 +257,7 @@ class SetCustomShippingMethodTest extends TestCase
         $action = CartSetCustomShippingMethodAction::of();
         $action->setShippingMethodName($changedData['shippingMethodName']);
         $action->setShippingRate(
-            ShippingRate::fromArray(
-            [
+            ShippingRate::fromArray([
                 'price' => [
                     'centAmount' => 0,
                     'currency' => 'EUR',

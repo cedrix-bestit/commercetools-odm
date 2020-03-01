@@ -55,7 +55,7 @@ class DefaultRepositoryDecorator implements ByKeySearchRepositoryInterface
      *
      * @return ObjectRepository
      */
-    public function filter(string... $filters): ObjectRepository
+    public function filter(string ...$filters): ObjectRepository
     {
         return $this->getWrapped()->{__FUNCTION__}(...func_get_args());
     }

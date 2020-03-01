@@ -244,7 +244,7 @@ class DefaultRepository implements ByKeySearchRepositoryInterface, LoggerAwareIn
     /**
      * {@inheritdoc}
      */
-    public function filter(string... $filters): ObjectRepository
+    public function filter(string ...$filters): ObjectRepository
     {
         $this->filters = $filters;
 

@@ -1,0 +1,7 @@
+parameters:
+    excludes_analyse:
+    ignoreErrors:
+    level: 1
+    paths:
+        - src
+        #- tests

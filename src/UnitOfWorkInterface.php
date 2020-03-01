@@ -41,7 +41,7 @@ interface UnitOfWorkInterface extends Countable, LoggerAwareInterface
     /**
      * Returns true if the unit of work contains the given document.
      *
-     * @param  object $document
+     * @param mixed $document
      *
      * @return bool
      */
@@ -84,7 +84,7 @@ interface UnitOfWorkInterface extends Countable, LoggerAwareInterface
      *
      * It's persistence will no longer be managed by Doctrine.
      *
-     * @param object $document The document to detach.
+     * @param mixed $document The document to detach.
      *
      * @return void
      */
@@ -93,7 +93,7 @@ interface UnitOfWorkInterface extends Countable, LoggerAwareInterface
     /**
      * Detaches the given object after flush.
      *
-     * @param object $object
+     * @param mixed $object
      *
      * @return void
      */
@@ -109,7 +109,7 @@ interface UnitOfWorkInterface extends Countable, LoggerAwareInterface
     /**
      * Refresh the given object by querying commercetools to get the current state.
      *
-     * @param object $object
+     * @param mixed $object
      *
      * @return void
      */
@@ -118,7 +118,7 @@ interface UnitOfWorkInterface extends Countable, LoggerAwareInterface
     /**
      * Registers the given document as managed.
      *
-     * @param object $document
+     * @param mixed $document
      * @param string|int $identifier
      * @param mixed|null $revision
      *

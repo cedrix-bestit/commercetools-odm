@@ -129,5 +129,5 @@ interface ObjectRepository extends BasicInterface
      *
      * @return ObjectRepository
      */
-    public function filter(string... $filters): ObjectRepository;
+    public function filter(string ...$filters): ObjectRepository;
 }

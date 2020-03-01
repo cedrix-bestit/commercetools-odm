@@ -8,8 +8,12 @@
         <exclude name="BestIt.DocTags.DisallowedMethodTags.TagNotAllowed" />
         <exclude name="BestIt.DocTags.DisallowedPropertyTags.TagNotAllowed" />
         <exclude name="BestIt.Formatting.AlphabeticallySortedUses.IncorrectlyOrderedUses" />
+        <exclude name="BestIt.TypeHints.ReturnTypeDeclaration.MissingReturnTypeHint" />
         <exclude name="BestIt.DocTags.RequiredClassTags.TagOccurrenceMinAuthor" />
         <exclude name="BestIt.DocTags.RequiredMethodTags.TagOccurrenceMinReturn" />
+        <exclude name="PSR12.ControlStructures.ControlStructureSpacing.CloseParenthesisLine" />
+        <exclude name="PSR12.ControlStructures.ControlStructureSpacing.FirstExpressionLine" />
+        <exclude name="SlevomatCodingStandard.Classes.ClassConstantVisibility.MissingConstantVisibility" />
         <exclude name="SlevomatCodingStandard.TypeHints.DeclareStrictTypes.DeclareStrictTypesMissing" />
     </rule>
 

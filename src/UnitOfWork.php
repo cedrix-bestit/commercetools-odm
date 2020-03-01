@@ -34,6 +34,7 @@ use Commercetools\Core\Model\Product\ProductVariant;
 use Commercetools\Core\Model\Product\ProductVariantDraft;
 use Commercetools\Core\Model\Type\TypeReference;
 use Commercetools\Core\Request\AbstractDeleteRequest;
+use Commercetools\Core\Request\AbstractUpdateRequest;
 use Commercetools\Core\Request\ClientRequestInterface;
 use Commercetools\Core\Response\ApiResponseInterface;
 use Commercetools\Core\Response\ErrorResponse;
@@ -186,6 +187,19 @@ class UnitOfWork implements UnitOfWorkInterface
             ->setListenerInvoker($listenersInvoker);
     }
 
+    private function addInsertsToRequestBatch(): self
+    {
+        $client = $this->getClient();
+
+        foreach ($this->newDocuments as $id => $object) {
+            $request = $this->createNewRequest($this->getClassMetadata($object), $object);
+
+            $client->addBatchRequest($request->setIdentifier($id));
+        }
+
+        return$this;
+    }
+
     /**
      * Adds the removal requests to the request batch.
      *
@@ -209,10 +223,35 @@ class UnitOfWork implements UnitOfWorkInterface
         return $this;
     }
 
+    private function addUpdatesToRequestBatch(): self
+    {
+        $client = $this->getClient();
+
+        // TODO: Refactor to method.
+        foreach ($this->identityMap as $id => $object) {
+            $state = $this->getDocumentState($object);
+
+            if ($state == self::STATE_MANAGED) {
+                $this->invokeLifecycleEvents($object, Events::PRE_PERSIST);
+
+                $updateRequest = $this->computeChangedObject($this->getClassMetadata($object), $object);
+
+                if ($updateRequest) {
+                    $client->addBatchRequest($updateRequest->setIdentifier($id));
+                } else {
+                    //We can remove it now, if there are no changed but a deferred detach.
+                    $this->processDeferredDetach($object);
+                }
+            }
+        }
+
+        return $this;
+    }
+
     /**
      * Cascades a detach operation to associated documents.
      *
-     * @param object $document
+     * @param mixed $document
      * @param array $visited
      *
      * @return void
@@ -225,7 +264,7 @@ class UnitOfWork implements UnitOfWorkInterface
      * Cascades the save into the documents childs.
      *
      * @param ClassMetadataInterface $class
-     * @param object $document
+     * @param mixed $document
      * @param array $visited
      *
      * @return UnitOfWork
@@ -258,7 +297,7 @@ class UnitOfWork implements UnitOfWorkInterface
      * @todo Topmost array should be used as a whole.
      *
      * @param ClassMetadataInterface $metadata
-     * @param object $object
+     * @param mixed $object
      *
      * @return ClientRequestInterface|null
      */
@@ -290,44 +329,16 @@ class UnitOfWork implements UnitOfWorkInterface
      */
     private function computeChangedObjects()
     {
-        $client = $this->getClient();
-
-        // TODO: Refactor to method.
-        foreach ($this->identityMap as $id => $object) {
-            $state = $this->getDocumentState($object);
-
-            if ($state == self::STATE_MANAGED) {
-                $this->getListenerInvoker()->invoke(
-                    new LifecycleEventArgs($object, $this->getDocumentManager()),
-                    Events::PRE_PERSIST,
-                    $object,
-                    $this->getClassMetadata($object)
-                );
-
-                $updateRequest = $this->computeChangedObject($this->getClassMetadata($object), $object);
-
-                if ($updateRequest) {
-                    $client->addBatchRequest($updateRequest->setIdentifier($id));
-                } else {
-                    $this->processDeferredDetach($object);
-                }
-            }
-        }
-
-        // TODO Refactor to method.
-        foreach ($this->newDocuments as $id => $object) {
-            $request = $this->createNewRequest($this->getClassMetadata($object), $object);
-
-            $client->addBatchRequest($request->setIdentifier($id));
-        }
-
-        $this->addRemovalsToRequestBatch();
+        $this
+            ->addUpdatesToRequestBatch()
+            ->addInsertsToRequestBatch()
+            ->addRemovalsToRequestBatch();
     }
 
     /**
      * Returns true if the unit of work contains the given document.
      *
-     * @param  object $document
+     * @param mixed $document
      *
      * @return bool
      */
@@ -391,7 +402,10 @@ class UnitOfWork implements UnitOfWorkInterface
     public function createDocument(string $className, $responseObject, array $hints = [], $sourceDocument = null)
     {
         /** @var ClassMetadataInterface $metadata */
+        $document = null;
+        $id = null;
         $metadata = $this->getClassMetadata($className);
+        $version = null;
 
         if ($responseObject instanceof $className) {
             $targetDocument = clone $responseObject;
@@ -429,13 +443,7 @@ class UnitOfWork implements UnitOfWorkInterface
         }
 
         // TODO Find in new objects.
-
-        $this->getListenerInvoker()->invoke(
-            new LifecycleEventArgs($targetDocument, $this->getDocumentManager()),
-            Events::POST_LOAD,
-            $targetDocument,
-            $metadata
-        );
+        $this->invokeLifecycleEvents($targetDocument, Events::POST_LOAD, $metadata);
 
         if (@$id) {
             $this->registerAsManaged($targetDocument, $id, @$version);
@@ -448,7 +456,7 @@ class UnitOfWork implements UnitOfWorkInterface
      * Creates the draft for a new request.
      *
      * @param ClassMetadataInterface $metadata
-     * @param object $object The source object.
+     * @param mixed $object The source object.
      * @param array $fields
      *
      * @return JsonObject
@@ -509,7 +517,7 @@ class UnitOfWork implements UnitOfWorkInterface
      *
      * @param array $changedData
      * @param array $oldData
-     * @param object $document
+     * @param mixed $document
      * @param ClassMetadataInterface|null $metadata
      *
      * @return ClientRequestInterface
@@ -537,7 +545,7 @@ class UnitOfWork implements UnitOfWorkInterface
         } else {
             $request = $this->getDocumentManager()->createRequest(
                 $documentClass,
-                $requestClass,
+                DocumentManager::REQUEST_TYPE_UPDATE_BY_ID,
                 $document->getId(),
                 $document->getVersion()
             );
@@ -579,7 +587,7 @@ class UnitOfWork implements UnitOfWorkInterface
      * Detaches a document from the persistence management.
      * It's persistence will no longer be managed by Doctrine.
      *
-     * @param object $object The document to detach.
+     * @param mixed $object The document to detach.
      *
      * @return void
      */
@@ -592,7 +600,7 @@ class UnitOfWork implements UnitOfWorkInterface
     /**
      * Detaches the given object after flush.
      *
-     * @param object $object
+     * @param mixed $object
      *
      * @return void
      */
@@ -604,7 +612,7 @@ class UnitOfWork implements UnitOfWorkInterface
     /**
      * Executes a detach operation on the given entity.
      *
-     * @param object $object
+     * @param mixed $object
      * @param array $visited
      *
      * @return void
@@ -622,12 +630,7 @@ class UnitOfWork implements UnitOfWorkInterface
 
             unset($this->newDocuments[$oid], $this->originalEntityData[$oid]);
 
-            $this->getListenerInvoker()->invoke(
-                new LifecycleEventArgs($object, $this->getDocumentManager()),
-                Events::POST_DETACH,
-                $object,
-                $this->getClassMetadata($object)
-            );
+            $this->invokeLifecycleEvents($object, Events::POST_DETACH);
         }
     }
 
@@ -649,12 +652,7 @@ class UnitOfWork implements UnitOfWorkInterface
             $this->scheduledRemovals[$oid] = $object;
             $this->documentState[$oid] = self::STATE_REMOVED;
 
-            $this->getListenerInvoker()->invoke(
-                new LifecycleEventArgs($object, $this->getDocumentManager()),
-                Events::PRE_REMOVE,
-                $object,
-                $this->getClassMetadata($object)
-            );
+            $this->invokeLifecycleEvents($object, Events::PRE_REMOVE);
         }
     }
 
@@ -756,7 +754,7 @@ class UnitOfWork implements UnitOfWorkInterface
     /**
      * Uses the getter of the sourceTarget to fetch the field names of the metadata.
      *
-     * @param object $sourceTarget
+     * @param mixed $sourceTarget
      * @param ClassMetadataInterface $metadata
      *
      * @return array
@@ -765,14 +763,14 @@ class UnitOfWork implements UnitOfWorkInterface
     {
         $return = [];
 
-        if (!$metadata) {
-            $metadata = $this->getClassMetadata($sourceTarget);
-        }
-
         if (method_exists($sourceTarget, 'toArray')) {
             /** @var JsonObject $sourceTarget */
             $return = $sourceTarget->toArray();
         } else {
+            if (!$metadata) {
+                $metadata = $this->getClassMetadata($sourceTarget);
+            }
+
             array_map(
                 function ($field) use (&$return, $sourceTarget) {
                     $fieldValue = $sourceTarget->{'get' . ucfirst($field)}();
@@ -858,7 +856,7 @@ class UnitOfWork implements UnitOfWorkInterface
     /**
      * Get the state of a document.
      *
-     * @param object $document
+     * @param mixed $document
      * @todo Split for Key and ID. Catch the exception of the commercetools process?
      *
      * @return int
@@ -906,7 +904,7 @@ class UnitOfWork implements UnitOfWorkInterface
     /**
      * Returns a key for the given object.
      *
-     * @param object $object
+     * @param mixed $object
      *
      * @return string
      */
@@ -965,6 +963,11 @@ class UnitOfWork implements UnitOfWorkInterface
                     break;
 
                 case $status === 409:
+                    $clientRequest = $response->getRequest();
+
+                    assert($clientRequest instanceof AbstractUpdateRequest);
+
+                    var_dump($response->getHeaders(), $clientRequest->getResultClass(), $clientRequest->getId());
                     $class = ConflictException::class;
                     break;
 
@@ -1008,6 +1011,16 @@ class UnitOfWork implements UnitOfWorkInterface
         }
 
         return $isNested;
+    }
+
+    private function invokeLifecycleEvents($document, string $eventName, ClassMetadataInterface $metadata = null): void
+    {
+        $this->getListenerInvoker()->invoke(
+            new LifecycleEventArgs($document, $this->getDocumentManager()),
+            $eventName,
+            $document,
+            $metadata ?: $this->getClassMetadata($document)
+        );
     }
 
     /**
@@ -1084,7 +1097,7 @@ class UnitOfWork implements UnitOfWorkInterface
      * Parses the data of the given object to create a cart draft
      *
      * @param ClassMetadataInterface $metadata
-     * @param object $object The source object.
+     * @param mixed $object The source object.
      * @param array $fields
      *
      * @return array
@@ -1214,7 +1227,7 @@ class UnitOfWork implements UnitOfWorkInterface
      * Parses the data of the given object to create a value array for the draft of the object.
      *
      * @param ClassMetadataInterface $metadata
-     * @param object $object The source object.
+     * @param mixed $object The source object.
      * @param array $fields
      *
      * @return array
@@ -1258,12 +1271,7 @@ class UnitOfWork implements UnitOfWorkInterface
      */
     protected function persistNew($document): UnitOfWork
     {
-        $this->getListenerInvoker()->invoke(
-            new LifecycleEventArgs($document, $this->getDocumentManager()),
-            Events::PRE_PERSIST,
-            $document,
-            $this->getClassMetadata($document)
-        );
+        $this->invokeLifecycleEvents($document, Events::PRE_PERSIST);
 
         $this->registerAsManaged($document);
 
@@ -1298,12 +1306,7 @@ class UnitOfWork implements UnitOfWorkInterface
     {
         $this->getLogger()->info('Deleted object.', ['objectKey' => $objectId]);
 
-        $this->getListenerInvoker()->invoke(
-            new LifecycleEventArgs($object = $this->scheduledRemovals[$objectId], $this->getDocumentManager()),
-            Events::POST_REMOVE,
-            $object,
-            $this->getClassMetadata($object)
-        );
+        $this->invokeLifecycleEvents($object = $this->scheduledRemovals[$objectId], Events::POST_REMOVE);
 
         $this->removeFromIdentityMap($object);
     }
@@ -1345,12 +1348,7 @@ class UnitOfWork implements UnitOfWorkInterface
             $this->registerAsManaged($document, $document->getId(), $document->getVersion());
 
             // TODO Everything has a version?
-            $this->getListenerInvoker()->invoke(
-                new LifecycleEventArgs($document, $this->getDocumentManager()),
-                Events::POST_PERSIST,
-                $document,
-                $this->getClassMetadata($document)
-            );
+            $this->invokeLifecycleEvents($document, Events::POST_PERSIST);
 
             $this->processDeferredDetach($document);
         }
@@ -1398,8 +1396,8 @@ class UnitOfWork implements UnitOfWorkInterface
      * Refreshes the persistent state of an object from the database,
      * overriding any local changes that have not yet been persisted.
      *
-     * @param object $object The object to refresh.
-     * @param object $overwrite Commercetools returns a representation of the objectfor many update actions, so use
+     * @param mixed $object The object to refresh.
+     * @param mixed $overwrite Commercetools returns a representation of the objectfor many update actions, so use
      * this respons directly.
      * @return void
      */
@@ -1427,7 +1425,7 @@ class UnitOfWork implements UnitOfWorkInterface
     /**
      * Registers the given document as managed.
      *
-     * @param object $document
+     * @param mixed $document
      * @param string|int $identifier
      * @param mixed|null $revision
      *
@@ -1449,12 +1447,7 @@ class UnitOfWork implements UnitOfWorkInterface
             $this->newDocuments[$oid] = $document;
         }
 
-        $this->getListenerInvoker()->invoke(
-            new LifecycleEventArgs($document, $this->getDocumentManager()),
-            Events::POST_REGISTER,
-            $document,
-            $this->getClassMetadata($document)
-        );
+        $this->invokeLifecycleEvents($document, Events::POST_REGISTER);
 
         return $this;
     }

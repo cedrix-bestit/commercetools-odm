@@ -36,7 +36,7 @@ class ActionBuilderComposite implements ActionBuilderProcessorInterface
      * @param ClassMetadataInterface $metadata
      * @param array $changedData
      * @param array $oldData
-     * @param object $sourceObject
+     * @param mixed $sourceObject
      *
      * @return ActionBuilderInterface[]
      */
@@ -56,7 +56,7 @@ class ActionBuilderComposite implements ActionBuilderProcessorInterface
      * @param ClassMetadataInterface $metadata
      * @param array $changedData
      * @param array $oldData
-     * @param object $sourceObject
+     * @param mixed $sourceObject
      * @param string $parentPath
      *
      * @return array
