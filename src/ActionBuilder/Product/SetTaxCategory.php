@@ -46,9 +46,13 @@ class SetTaxCategory extends ProductActionBuilder
         $action = new ProductSetTaxCategoryAction();
 
         if ($changedValue) {
-            $action->setTaxCategory(TaxCategoryReference::ofId($changedValue['id']));
+            if (isset($changedValue['id']) && $changedValue['id'] !== null) {
+                $action->setTaxCategory(TaxCategoryReference::ofId($changedValue['id']));
+            }
+            if (isset($changedValue['key']) && $changedValue['key'] !== null) {
+                $action->setTaxCategory(TaxCategoryReference::ofKey($changedValue['key']));
+            }
         }
-
         return [$action];
     }
 }
